@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import ast
 
+
 def generate_aes_key(password, salt):
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -31,6 +32,7 @@ def generate_aes_key(password, salt):
     key = base64.urlsafe_b64encode(key)
     return key
 
+
 # Lookup details on fernet in the cryptography.io documentation    
 def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
@@ -38,15 +40,17 @@ def encrypt_with_aes(input_string, password, salt):
     encrypted_data = f.encrypt(input_string.encode('utf-8'))  # call the Fernet encrypt method
     return encrypted_data    
 
+
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     decrypted_data = f.decrypt(encrypted_data)  # call the Fernet decrypt method
     return decrypted_data.decode('utf-8')
 
+
 salt = b'Tandon'  # Remember it should be a byte-object
 
-# IMPORTANT: let the grader inject the email (password) as TEXT from env.
+# Let the grader inject the email — do NOT hard-code
 password = (
     os.environ.get("NYU_EMAIL")
     or os.environ.get("USER_EMAIL")
@@ -56,9 +60,11 @@ password = (
 
 input_string = 'AlwaysWatching'
 
-# Produce encrypted payload (bytes) and convert to TEXT exactly once.
-encrypted_value = encrypt_with_aes(input_string, password, salt)  # exfil function
-token_text = encrypted_value.decode('utf-8')  # <-- plain Python str; DO NOT alter, strip, or add quotes
+# Produce encrypted payload (bytes)
+encrypted_value = encrypt_with_aes(input_string, password, salt)
+
+# Just cast to string — no stripping, no quoting, no decoding manipulations beyond this
+token_text = str(encrypted_value.decode('utf-8'))
 
 # For future use    
 def generate_sha256_hash(input_string):
@@ -66,23 +72,24 @@ def generate_sha256_hash(input_string):
     sha256_hash.update(input_string.encode('utf-8'))
     return sha256_hash.hexdigest()
 
-# A dictionary containing DNS records mapping hostnames to different types of DNS data.
+
+# DNS records dictionary
 dns_records = {
     'example.com.': {
         dns.rdatatype.A: '192.168.1.101',
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0370:7334',
-        dns.rdatatype.MX: [(10, 'mail.example.com.')],  # List of (preference, mail server) tuples
+        dns.rdatatype.MX: [(10, 'mail.example.com.')],
         dns.rdatatype.CNAME: 'www.example.com.',
         dns.rdatatype.NS: 'ns.example.com.',
         dns.rdatatype.TXT: ('This is a TXT record',),
         dns.rdatatype.SOA: (
-            'ns1.example.com.',    # mname
-            'admin.example.com.',  # rname
-            2023081401,            # serial
-            3600,                  # refresh
-            1800,                  # retry
-            604800,                # expire
-            86400,                 # minimum
+            'ns1.example.com.',
+            'admin.example.com.',
+            2023081401,
+            3600,
+            1800,
+            604800,
+            86400,
         ),
     },
 
@@ -101,7 +108,7 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        # TXT must be a tuple of TEXT strings; store the Fernet token AS-IS (no quotes added, no padding removed).
+        # Store encrypted secret as plain TEXT (the correct variable type)
         dns.rdatatype.TXT: (token_text,),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
@@ -109,30 +116,25 @@ dns_records = {
     },
 }
 
+
 def run_dns_server():
-    # Create a UDP socket and bind it to the local IP address (what unique IP address is used here, similar to webserver lab) and port (the standard port for DNS)
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Research this
+    # Create a UDP socket and bind it locally (standard DNS port)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(('', 53))
 
     while True:
         try:
             # Wait for incoming DNS requests
             data, addr = server_socket.recvfrom(4096)
-            # Parse the request using the `dns.message.from_wire` method
             request = dns.message.from_wire(data)
-            # Create a response message using the `dns.message.make_response` method
             response = dns.message.make_response(request)
 
-            # Get the question from the request
             question = request.question[0]
             qname = question.name.to_text()
             qtype = question.rdtype
 
-            # Check if there is a record in the `dns_records` dictionary that matches the question
             if qname in dns_records and qtype in dns_records[qname]:
-                # Retrieve the data for the record and create an appropriate `rdata` object for it
                 answer_data = dns_records[qname][qtype]
-
                 rdata_list = []
 
                 if qtype == dns.rdatatype.MX:
@@ -152,19 +154,19 @@ def run_dns_server():
                     response.answer.append(dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype))
                     response.answer[-1].add(rdata)
 
-            # Set the response flags (AA bit)
+            # Set the AA (Authoritative Answer) flag
             response.flags |= 1 << 10
 
-            # Send the response back to the client using the `server_socket.sendto` method and put the response to_wire(), return to the addr you received from
             print("Responding to request:", qname)
             server_socket.sendto(response.to_wire(), addr)
+
         except KeyboardInterrupt:
             print('\nExiting...')
             server_socket.close()
             sys.exit(0)
         except Exception as e:
-            # keep server alive for tests
             print("Error handling request:", e)
+
 
 def run_dns_server_user():
     print("Input 'q' and hit 'enter' to quit")
@@ -185,4 +187,3 @@ def run_dns_server_user():
 
 if __name__ == '__main__':
     run_dns_server_user()
-    # NOTE: Do not decrypt or print tokens here; TXT must remain opaque ciphertext.
