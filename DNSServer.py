@@ -48,12 +48,8 @@ salt = b'Tandon' # Remember it should be a byte-object
 password = 'va2213@nyu.edu'
 input_string = 'AlwaysWatching'
 
+# produce encrypted payload to store in TXT — do NOT decrypt at module import (tests expect server to serve ciphertext)
 encrypted_value = encrypt_with_aes(input_string, password, salt) # exfil function
-try:
-    decrypted_value = decrypt_with_aes(encrypted_value, password, salt)  # exfil function
-except Exception as e:
-    print(f"decrypt error! Type: {type(e)} Value: {e}")
-    decrypted_value = None
 
 # For future use    
 def generate_sha256_hash(input_string):
@@ -96,8 +92,8 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        # Store encrypted exfil payload as a single TXT character-string
-        dns.rdatatype.TXT: (f'"{encrypted_value.decode("utf-8")}"',),
+        # store the encrypted token as a plain TXT string (no extra quotes) so client/tests reconstruct exact bytes
+        dns.rdatatype.TXT: (encrypted_value.decode('utf-8'),),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
@@ -106,13 +102,13 @@ dns_records = {
 
 def run_dns_server():
     # Create a UDP socket and bind it to the local IP address (what unique IP address is used here, similar to webserver lab) and port (the standard port for DNS)
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # Research this
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(('', 53))
 
     while True:
         try:
             # Wait for incoming DNS requests
-            data, addr = server_socket.recvfrom(1024)
+            data, addr = server_socket.recvfrom(4096)
             # Parse the request using the `dns.message.from_wire` method
             request = dns.message.from_wire(data)
             # Create a response message using the `dns.message.make_response` method
@@ -134,8 +130,8 @@ def run_dns_server():
                     for pref, server in answer_data:
                         rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
                 elif qtype == dns.rdatatype.SOA:
-                    mname, rname, serial, refresh, retry, expire, minimum = answer_data # What is the record format? See dns_records dictionary. Assume we handle @, Class, TTL elsewhere. Do some research on SOA Records
-                    rdata = SOA(dns.rdataclass.IN, dns.rdatatype.SOA, mname, rname, serial, refresh, retry, expire, minimum) # follow format from previous line
+                    mname, rname, serial, refresh, retry, expire, minimum = answer_data
+                    rdata = SOA(dns.rdataclass.IN, dns.rdatatype.SOA, mname, rname, serial, refresh, retry, expire, minimum)
                     rdata_list.append(rdata)
                 else:
                     if isinstance(answer_data, str):
@@ -156,7 +152,9 @@ def run_dns_server():
             print('\nExiting...')
             server_socket.close()
             sys.exit(0)
-
+        except Exception as e:
+            # keep server alive for tests: print error but continue
+            print("Error handling request:", e)
 
 def run_dns_server_user():
     print("Input 'q' and hit 'enter' to quit")
@@ -178,4 +176,3 @@ def run_dns_server_user():
 if __name__ == '__main__':
     run_dns_server_user()
     #print("Encrypted Value:", encrypted_value)
-    #print("Decrypted Value:", decrypted_value)
