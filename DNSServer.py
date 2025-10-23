@@ -35,18 +35,18 @@ def generate_aes_key(password, salt):
 def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    encrypted_data = f.encrypt(input_string.encode('utf-8')) #call the Fernet encrypt method
+    encrypted_data = f.encrypt(input_string.encode('utf-8'))  # call the Fernet encrypt method
     return encrypted_data    
 
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    decrypted_data = f.decrypt(encrypted_data) #call the Fernet decrypt method
+    decrypted_data = f.decrypt(encrypted_data)  # call the Fernet decrypt method
     return decrypted_data.decode('utf-8')
 
-salt = b'Tandon' # Remember it should be a byte-object
+salt = b'Tandon'  # Remember it should be a byte-object
 
-# Do NOT hard-code your email; let the grader provide it.
+# IMPORTANT: let the grader inject the email (password) as TEXT from env.
 password = (
     os.environ.get("NYU_EMAIL")
     or os.environ.get("USER_EMAIL")
@@ -56,8 +56,9 @@ password = (
 
 input_string = 'AlwaysWatching'
 
-# produce encrypted payload to store in TXT — do NOT decrypt at module import
-encrypted_value = encrypt_with_aes(input_string, password, salt) # exfil function
+# Produce encrypted payload (bytes) and convert to TEXT exactly once.
+encrypted_value = encrypt_with_aes(input_string, password, salt)  # exfil function
+token_text = encrypted_value.decode('utf-8')  # <-- plain Python str; DO NOT alter, strip, or add quotes
 
 # For future use    
 def generate_sha256_hash(input_string):
@@ -75,16 +76,16 @@ dns_records = {
         dns.rdatatype.NS: 'ns.example.com.',
         dns.rdatatype.TXT: ('This is a TXT record',),
         dns.rdatatype.SOA: (
-            'ns1.example.com.', #mname
-            'admin.example.com.', #rname
-            2023081401, #serial
-            3600, #refresh
-            1800, #retry
-            604800, #expire
-            86400, #minimum
+            'ns1.example.com.',    # mname
+            'admin.example.com.',  # rname
+            2023081401,            # serial
+            3600,                  # refresh
+            1800,                  # retry
+            604800,                # expire
+            86400,                 # minimum
         ),
     },
-   
+
     # Assignment records (FQDNs)
     'safebank.com.': {
         dns.rdatatype.A: '192.168.1.102',
@@ -100,8 +101,8 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        # Store the encrypted token EXACTLY as produced (no stripping, no extra quotes)
-        dns.rdatatype.TXT: (encrypted_value.decode('utf-8'),),
+        # TXT must be a tuple of TEXT strings; store the Fernet token AS-IS (no quotes added, no padding removed).
+        dns.rdatatype.TXT: (token_text,),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
@@ -110,7 +111,7 @@ dns_records = {
 
 def run_dns_server():
     # Create a UDP socket and bind it to the local IP address (what unique IP address is used here, similar to webserver lab) and port (the standard port for DNS)
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Research this
     server_socket.bind(('', 53))
 
     while True:
@@ -146,11 +147,12 @@ def run_dns_server():
                         rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
                     else:
                         rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, data) for data in answer_data]
+
                 for rdata in rdata_list:
                     response.answer.append(dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype))
                     response.answer[-1].add(rdata)
 
-            # Set the response flags
+            # Set the response flags (AA bit)
             response.flags |= 1 << 10
 
             # Send the response back to the client using the `server_socket.sendto` method and put the response to_wire(), return to the addr you received from
@@ -161,7 +163,7 @@ def run_dns_server():
             server_socket.close()
             sys.exit(0)
         except Exception as e:
-            # keep server alive for tests: print error but continue
+            # keep server alive for tests
             print("Error handling request:", e)
 
 def run_dns_server_user():
@@ -183,4 +185,4 @@ def run_dns_server_user():
 
 if __name__ == '__main__':
     run_dns_server_user()
-    #print("Encrypted Value:", encrypted_value)
+    # NOTE: Do not decrypt or print tokens here; TXT must remain opaque ciphertext.
