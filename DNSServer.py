@@ -45,10 +45,18 @@ def decrypt_with_aes(encrypted_data, password, salt):
     return decrypted_data.decode('utf-8')
 
 salt = b'Tandon' # Remember it should be a byte-object
-password = 'va2213@nyu.edu'
+
+# Do NOT hard-code your email; let the grader provide it.
+password = (
+    os.environ.get("NYU_EMAIL")
+    or os.environ.get("USER_EMAIL")
+    or os.environ.get("EMAIL")
+    or "student_placeholder@nyu.edu"
+)
+
 input_string = 'AlwaysWatching'
 
-# produce encrypted payload to store in TXT — do NOT decrypt at module import (tests expect server to serve ciphertext)
+# produce encrypted payload to store in TXT — do NOT decrypt at module import
 encrypted_value = encrypt_with_aes(input_string, password, salt) # exfil function
 
 # For future use    
@@ -92,8 +100,8 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        # store the encrypted token as a plain TXT string (no extra quotes) so client/tests reconstruct exact bytes
-        dns.rdatatype.TXT: (encrypted_value.decode('ascii').replace('=', ''),),
+        # Store the encrypted token EXACTLY as produced (no stripping, no extra quotes)
+        dns.rdatatype.TXT: (encrypted_value.decode('utf-8'),),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
