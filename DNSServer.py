@@ -32,24 +32,29 @@ def generate_aes_key(password, salt):
 
 # Lookup details on fernet in the cryptography.io documentation    
 def encrypt_with_aes(input_string, password, salt):
-    key = generate_aes_key(password, salt)
-    f = Fernet(key)
-    encrypted_data = f.encrypt(input_string.encode('utf-8')) #call the Fernet encrypt method
+    key = generate_aes_key(password, salt)          # << filled
+    f = Fernet(key)                                 # << filled
+    encrypted_data = f.encrypt(input_string.encode('utf-8'))  # << filled
     return encrypted_data    
 
 def decrypt_with_aes(encrypted_data, password, salt):
-    key = generate_aes_key(password, salt)
-    f = Fernet(key)
-    decrypted_data = f.decrypt(encrypted_data) #call the Fernet decrypt method
+    key = generate_aes_key(password, salt)          # << filled
+    f = Fernet(key)                                 # << filled
+    decrypted_data = f.decrypt(encrypted_data)      # << filled
     return decrypted_data.decode('utf-8')
 
-salt = b'Tandon' # Remember it should be a byte-object
-# Let the grader inject the email via environment; don't hard-code.
-password = os.environ.get("NYU_EMAIL") or os.environ.get("USER_EMAIL") or os.environ.get("EMAIL") or "student_placeholder@nyu.edu"
-input_string = "AlwaysWatching"
+salt = b'Tandon'                                    # << filled (byte-object)
+# Let the grader inject the email; do not hard-code.
+password = (os.environ.get("NYU_EMAIL") or
+            os.environ.get("USER_EMAIL") or
+            os.environ.get("EMAIL") or
+            "student_placeholder@nyu.edu")          # << filled
+input_string = "AlwaysWatching"                     # << filled
 
-encrypted_value = encrypt_with_aes(input_string, password, salt) # exfil function
-decrypted_value = decrypt_with_aes(encrypted_value, password, salt)  # exfil function
+# Produce ciphertext (bytes) and store as plain TEXT (single string) for TXT record
+encrypted_value = encrypt_with_aes(input_string, password, salt)  # exfil function
+# DO NOT modify/pad/quote; just a single plain string token:
+ciphertext_text = encrypted_value.decode('utf-8')
 
 # For future use    
 def generate_sha256_hash(input_string):
@@ -92,11 +97,8 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        # IMPORTANT:
-        # - Do NOT decode the ciphertext bytes.
-        # - Store a *string literal* of the bytes (str(encrypted_value)),
-        #   and wrap it in quotes so dnspython treats it as one TXT character-string.
-        dns.rdatatype.TXT: (f'"{str(encrypted_value)}"',),
+        # TXT MUST be a tuple of TEXT strings. Put the ciphertext as ONE plain string.
+        dns.rdatatype.TXT: (ciphertext_text,),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
@@ -105,20 +107,20 @@ dns_records = {
 
 def run_dns_server():
     # Create a UDP socket and bind it to the local IP address (what unique IP address is used here, similar to webserver lab) and port (the standard port for DNS)
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # Research this
-    server_socket.bind(('', 53))
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # << filled
+    server_socket.bind(('', 53))                                      # << filled
 
     while True:
         try:
             # Wait for incoming DNS requests
             data, addr = server_socket.recvfrom(1024)
             # Parse the request using the `dns.message.from_wire` method
-            request = dns.message.from_wire(data)
+            request = dns.message.from_wire(data)                     # << filled
             # Create a response message using the `dns.message.make_response` method
-            response = dns.message.make_response(request)
+            response = dns.message.make_response(request)             # << filled
 
             # Get the question from the request
-            question = request.question[0]
+            question = request.question[0]                            # << filled
             qname = question.name.to_text()
             qtype = question.rdtype
 
@@ -129,12 +131,12 @@ def run_dns_server():
 
                 rdata_list = []
 
-                if qtype == dns.rdatatype.MX:
+                if qtype == dns.rdatatype.MX:                         # << filled
                     for pref, server in answer_data:
                         rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
-                elif qtype == dns.rdatatype.SOA:
-                    mname, rname, serial, refresh, retry, expire, minimum = answer_data # What is the record format? See dns_records dictionary. Assume we handle @, Class, TTL elsewhere. Do some research on SOA Records
-                    rdata = SOA(dns.rdataclass.IN, dns.rdatatype.SOA, mname, rname, serial, refresh, retry, expire, minimum) # follow format from previous line
+                elif qtype == dns.rdatatype.SOA:                      # << filled
+                    mname, rname, serial, refresh, retry, expire, minimum = answer_data
+                    rdata = SOA(dns.rdataclass.IN, dns.rdatatype.SOA, mname, rname, serial, refresh, retry, expire, minimum)
                     rdata_list.append(rdata)
                 else:
                     if isinstance(answer_data, str):
@@ -150,7 +152,7 @@ def run_dns_server():
 
             # Send the response back to the client using the `server_socket.sendto` method and put the response to_wire(), return to the addr you received from
             print("Responding to request:", qname)
-            server_socket.sendto(response.to_wire(), addr)
+            server_socket.sendto(response.to_wire(), addr)            # << filled
         except KeyboardInterrupt:
             print('\nExiting...')
             server_socket.close()
