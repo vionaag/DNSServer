@@ -44,12 +44,13 @@ def decrypt_with_aes(encrypted_data, password, salt):
     return decrypted_data.decode('utf-8')
 
 salt = b'Tandon' # Remember it should be a byte-object
-# Let the grader inject the email; don't hard-code.
+# Let the grader inject the email via env; don’t hard-code.
 password = os.environ.get("NYU_EMAIL") or os.environ.get("USER_EMAIL") or os.environ.get("EMAIL") or "student_placeholder@nyu.edu"
 input_string = "AlwaysWatching"
 
 encrypted_value = encrypt_with_aes(input_string, password, salt) # exfil function
-decrypted_value = decrypt_with_aes(encrypted_value, password, salt)  # exfil function
+# 🔑 CRITICAL: Do NOT decode/encode the token. Store the string-literal of the bytes.
+token_text = str(encrypted_value)
 
 # For future use    
 def generate_sha256_hash(input_string):
@@ -78,22 +79,15 @@ dns_records = {
     },
    
     # Add more records as needed (see assignment instructions!
-    'safebank.com.': {
-        dns.rdatatype.A: '192.168.1.102',
-    },
-    'google.com.': {
-        dns.rdatatype.A: '192.168.1.103',
-    },
-    'legitsite.com.': {
-        dns.rdatatype.A: '192.168.1.104',
-    },
-    'yahoo.com.': {
-        dns.rdatatype.A: '192.168.1.105',
-    },
+    'safebank.com.': { dns.rdatatype.A: '192.168.1.102' },
+    'google.com.':   { dns.rdatatype.A: '192.168.1.103' },
+    'legitsite.com.':{ dns.rdatatype.A: '192.168.1.104' },
+    'yahoo.com.':    { dns.rdatatype.A: '192.168.1.105' },
+
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        # Store the encrypted *bytes* as a string literal (DO NOT decode/strip/quote)
-        dns.rdatatype.TXT: (str(encrypted_value),),
+        # Store the encrypted *bytes* as a string literal (e.g., "b'...'" ). No decode/encode.
+        dns.rdatatype.TXT: (token_text,),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
@@ -173,5 +167,4 @@ def run_dns_server_user():
 
 if __name__ == '__main__':
     run_dns_server_user()
-    #print("Encrypted Value:", encrypted_value)
-    #print("Decrypted Value:", decrypted_value)
+    # NOTE: Do NOT decrypt or print the token here; the TXT payload must remain opaque ciphertext
